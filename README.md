@@ -312,7 +312,7 @@ docker compose up --build
 
 ## License
 
-MIT
+Apache 2.0
 
 ---
 
