@@ -1,0 +1,17 @@
+{
+  "name": "structured-memory-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Structured Memory — AI agents can create, write, and query structured memories",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.25.76"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

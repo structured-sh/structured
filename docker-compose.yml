@@ -1,0 +1,64 @@
+# ═══════════════════════════════════════════════════════════════
+# Structured Memory — Docker Compose
+# ═══════════════════════════════════════════════════════════════
+#
+# Usage:
+#   docker compose up        → Start all services
+#   docker compose up -d     → Start in background
+#   docker compose down      → Stop all services
+#   docker compose logs -f   → Follow logs
+#
+# Data is persisted in ./data/ on your host machine.
+# Parquet files: ./data/parquet/
+# SQLite DB:     ./data/structured.db
+#
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # ─── API Server ──────────────────────────────────────────────
+  # Core engine: Hono + SQLite + DuckDB + tiny-parquet
+  api:
+    build: ./api
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=3001
+      - API_KEY=sk_structured_dev
+      - DB_PATH=/app/data/structured.db
+      - STORAGE_PATH=/app/data/parquet
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ─── MCP Server ─────────────────────────────────────────────
+  # stdio transport — connect via docker exec or MCP client
+  mcp:
+    build: ./mcp
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      - API_URL=http://api:3001
+      - API_KEY=sk_structured_dev
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+  # ─── Dashboard ──────────────────────────────────────────────
+  # Web UI for schema management, data preview, query console
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      - VITE_API_URL=http://localhost:3001
+      - VITE_API_KEY=sk_structured_dev
+    restart: unless-stopped

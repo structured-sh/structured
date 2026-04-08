@@ -1,0 +1,23 @@
+{
+  "name": "structured-memory-api",
+  "version": "0.1.0",
+  "description": "Structured Memory API — schema-native storage for AI agents",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "node --watch index.js",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.33.1-dev42.0",
+    "@hono/node-server": "^1.14.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "hono": "^4.7.10",
+    "sql.js": "^1.12.0",
+    "tiny-parquet": "^0.1.2",
+    "zod": "^4.3.6"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
