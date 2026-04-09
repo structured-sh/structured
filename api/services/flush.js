@@ -109,6 +109,15 @@ export async function flushRecords(storage, memoryName, records, fields, schemaM
             `rejected=${driftSummary.totalRejected}`);
     }
 
+    // ── DLQ: persist rejected records instead of silently dropping them ──
+    if (rejected.length > 0) {
+        try {
+            await flushToDLQ(storage, memoryName, rejected);
+        } catch (err) {
+            console.error(`DLQ write failed for ${memoryName}:`, err.message);
+        }
+    }
+
     if (accepted.length === 0) {
         return { bytesWritten: 0, accepted: 0, rejected: rejected.length, path: null };
     }
@@ -152,6 +161,49 @@ export async function flushRecords(storage, memoryName, records, fields, schemaM
         driftSummary,
     };
 }
+
+/**
+ * Write rejected records to a Dead Letter Queue memory.
+ * DLQ memory name: _dlq_{memoryName}
+ * Schema: _source_memory, _rejected_at, _reason, _payload (JSON string)
+ */
+async function flushToDLQ(storage, memoryName, rejected) {
+    const dlqName = `_dlq_${memoryName}`;
+    const dlqFields = [
+        { name: '_source_memory', type: 'string' },
+        { name: '_rejected_at',   type: 'timestamp' },
+        { name: '_reason',        type: 'string' },
+        { name: '_payload',       type: 'string' },
+    ];
+
+    const now = Date.now();
+    const dlqRecords = rejected.map(({ record, reason }) => ({
+        _source_memory: memoryName,
+        _rejected_at:   now,
+        _reason:        JSON.stringify(reason),
+        _payload:       JSON.stringify(record),
+    }));
+
+    const { schema, columnData } = transformToColumns(dlqRecords, dlqFields);
+    const buffer = await writeParquet(schema, columnData, { compression: 'snappy' });
+    const path = buildPath(dlqName);
+
+    await storage.put(path, buffer, {
+        customMetadata: {
+            memory_name: dlqName,
+            record_count: String(dlqRecords.length),
+            schema_mode: 'flex',
+            created_at: new Date().toISOString(),
+        },
+    });
+
+    try {
+        updateMemoryStats(dlqName, dlqRecords.length, buffer.byteLength);
+    } catch (_) { /* DLQ memory may not be registered in DB — that's ok */ }
+
+    console.log(`DLQ: ${dlqRecords.length} record(s) → ${dlqName}`);
+}
+
 
 /**
  * Build a storage path for a Parquet file.
