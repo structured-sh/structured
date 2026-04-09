@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Database, Table, Search, FileText, Settings, Brain, Plus, Play, Trash2, Eye, Download, X, ChevronRight, HardDrive, BarChart3, Layers, Cable, Copy, Check, Terminal, ExternalLink, Zap } from 'lucide-react';
+import { Database, Table, Search, FileText, Settings, Brain, Plus, Play, Trash2, Eye, Download, X, ChevronRight, HardDrive, BarChart3, Layers, Cable, Copy, Check, Terminal, ExternalLink, Zap, RefreshCw } from 'lucide-react';
 import { api } from './api.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -792,12 +792,30 @@ function CopyBlock({ label, value, language = 'json' }) {
 function ConnectPage() {
     const [connected, setConnected] = useState(null);
     const [health, setHealth] = useState(null);
+    const [keyInfo, setKeyInfo] = useState(null);
+    const [newKey, setNewKey] = useState(null);
+    const [rotating, setRotating] = useState(false);
 
     useEffect(() => {
         api.health()
             .then(h => { setConnected(true); setHealth(h); })
             .catch(() => setConnected(false));
+        api.getApiKey().then(setKeyInfo).catch(() => {});
     }, []);
+
+    const handleRotate = async () => {
+        if (!confirm('Rotate API key? The current key will stop working immediately.')) return;
+        setRotating(true);
+        try {
+            const result = await api.rotateApiKey();
+            setNewKey(result.key);
+            setKeyInfo({ masked: result.masked, source: 'db' });
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setRotating(false);
+        }
+    };
 
     const apiUrl = window.location.hostname === 'localhost'
         ? 'http://localhost:3001'
@@ -883,6 +901,50 @@ curl -X POST ${apiUrl}/query \\
                     <div className={`badge ${connected ? 'badge-success' : connected === false ? 'badge-error' : ''}`}>
                         {connected ? 'ONLINE' : connected === false ? 'OFFLINE' : '...'}
                     </div>
+                </div>
+
+                {/* API Key */}
+                <div className="card" style={{ marginBottom: 24 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <div>
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>API Key</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                {keyInfo ? `Source: ${keyInfo.source}` : 'Loading...'}
+                            </div>
+                        </div>
+                        <button className="btn btn-secondary" onClick={handleRotate} disabled={rotating}>
+                            <RefreshCw size={13} /> {rotating ? 'Rotating...' : 'Rotate Key'}
+                        </button>
+                    </div>
+
+                    {newKey ? (
+                        <div style={{
+                            padding: '12px 16px',
+                            background: 'var(--accent-dim)',
+                            border: '1px solid rgba(42,125,111,0.3)',
+                            borderRadius: 5,
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 12,
+                        }}>
+                            <div style={{ fontSize: 10, color: 'var(--accent-primary)', marginBottom: 6, fontWeight: 600 }}>
+                                ✓ NEW KEY — copy now, it won't be shown again
+                            </div>
+                            <div style={{ color: 'var(--text-primary)', wordBreak: 'break-all' }}>{newKey}</div>
+                        </div>
+                    ) : (
+                        <div style={{
+                            padding: '10px 16px',
+                            background: 'var(--bg-primary)',
+                            border: '1px solid var(--glass-border)',
+                            borderRadius: 5,
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 12,
+                            color: 'var(--text-secondary)',
+                            letterSpacing: '0.05em',
+                        }}>
+                            {keyInfo?.masked || '─────────────'}
+                        </div>
+                    )}
                 </div>
 
                 {/* MCP Clients */}

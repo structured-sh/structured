@@ -61,4 +61,8 @@ export const api = {
 
     // Status
     status: () => request('GET', '/status'),
+
+    // API Key management
+    getApiKey: () => request('GET', '/settings/api-key'),
+    rotateApiKey: () => request('POST', '/settings/rotate-key'),
 };

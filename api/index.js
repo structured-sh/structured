@@ -13,14 +13,18 @@ import { getIngestBuffer } from './services/ingest.js';
 import { executeQuery, previewMemory, closeDuckDb } from './services/query.js';
 import { LocalStorage } from './storage/local.js';
 import { authMiddleware } from './middleware/auth.js';
+import { getActiveApiKey, rotateApiKey } from './db/settings.js';
 import { handleSSE, handleMessage } from './mcp/handler.js';
 
 const app = new Hono();
 
 // Config
 const PORT = parseInt(process.env.PORT || '3001', 10);
-const API_KEY = process.env.API_KEY || null;
+const ENV_API_KEY = process.env.API_KEY || null;
 const STORAGE_PATH = process.env.STORAGE_PATH || './data/parquet';
+
+// Returns active key (DB overrides env — allows zero-restart rotation)
+function currentApiKey() { return getActiveApiKey(ENV_API_KEY); }
 
 // Initialize
 const storage = new LocalStorage(STORAGE_PATH);
@@ -39,7 +43,7 @@ app.use('*', async (c, next) => {
     if (c.req.path === '/health') return next();
     if (c.req.path === '/sse' || c.req.path === '/messages') return next();
 
-    const auth = authMiddleware(c.req.raw, API_KEY);
+    const auth = authMiddleware(c.req.raw, currentApiKey());
     if (!auth.ok) return auth.response;
 
     return next();
@@ -259,6 +263,23 @@ app.delete('/documents/:collection/:id', (c) => {
     return c.json({ deleted: true });
 });
 
+// ── API Key Management ───────────────────────────────────────────────────────
+
+app.get('/settings/api-key', (c) => {
+    const key = currentApiKey();
+    if (!key) return c.json({ key: null, source: 'none' });
+    const masked = key.slice(0, 8) + '…' + key.slice(-4);
+    const source = getActiveApiKey(null) ? 'db' : 'env';
+    return c.json({ masked, source, prefix: key.slice(0, 8) });
+});
+
+app.post('/settings/rotate-key', (c) => {
+    const newKey = rotateApiKey();
+    const masked = newKey.slice(0, 8) + '…' + newKey.slice(-4);
+    console.log(`API key rotated → ${masked}`);
+    return c.json({ key: newKey, masked, rotated_at: new Date().toISOString() });
+});
+
 // ── Buffer Status ─────────────────────────────────────────────────────────────
 
 app.get('/status', (c) => {
@@ -291,7 +312,7 @@ async function start() {
 │   MCP: http://localhost:${PORT}/sse            │
 │                                         │
 │   Storage: ${STORAGE_PATH.padEnd(28)}│
-│   Auth: ${API_KEY ? 'API key required' : 'disabled (dev mode)'}${''.padEnd(API_KEY ? 13 : 4)}│
+│   Auth: ${currentApiKey() ? 'API key required' : 'disabled (dev mode)'}${''.padEnd(currentApiKey() ? 13 : 4)}│
 └─────────────────────────────────────────┘
 `);
 
