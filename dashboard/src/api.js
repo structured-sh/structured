@@ -3,7 +3,6 @@
  */
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-const API_KEY = import.meta.env.VITE_API_KEY || '';
 
 const SESSION_KEY = 'structured_session';
 
@@ -25,10 +24,6 @@ async function request(method, path, body = null) {
         headers: { 'Content-Type': 'application/json' },
     };
 
-    if (API_KEY) {
-        opts.headers['Authorization'] = `Bearer ${API_KEY}`;
-    }
-
     const session = getSession();
     if (session) {
         opts.headers['X-Session-Token'] = session;
@@ -40,6 +35,12 @@ async function request(method, path, body = null) {
 
     const res = await fetch(`${API_URL}${path}`, opts);
     const data = await res.json();
+
+    if (res.status === 401) {
+        // Fire event so App can clear session and show login
+        window.dispatchEvent(new CustomEvent('auth:expired'));
+        throw new Error(data.error || 'Unauthorized');
+    }
 
     if (!res.ok) {
         throw new Error(data.error || `API error (${res.status})`);

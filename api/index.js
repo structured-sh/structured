@@ -13,9 +13,8 @@ import { getIngestBuffer } from './services/ingest.js';
 import { executeQuery, previewMemory, closeDuckDb } from './services/query.js';
 import { LocalStorage } from './storage/local.js';
 import { authMiddleware } from './middleware/auth.js';
-import { getActiveApiKey, rotateApiKey } from './db/settings.js';
+import { getActiveApiKey, rotateApiKey, setSetting } from './db/settings.js';
 import { login, validateSession, isDashboardAuthEnabled } from './services/auth.js';
-import { handleSSE, handleMessage } from './mcp/handler.js';
 
 const app = new Hono();
 
@@ -48,7 +47,7 @@ app.use('*', async (c, next) => {
     // Dashboard auth routes — skip API key check
     if (c.req.path.startsWith('/auth/')) return next();
 
-    const auth = authMiddleware(c.req.raw, currentApiKey());
+    const auth = authMiddleware(c.req.raw, currentApiKey(), DASHBOARD_PASSWORD);
     if (!auth.ok) return auth.response;
 
     return next();
@@ -314,6 +313,13 @@ app.post('/settings/rotate-key', (c) => {
     return c.json({ key: newKey, masked, rotated_at: new Date().toISOString() });
 });
 
+app.delete('/settings/api-key', (c) => {
+    // Clears the DB override — falls back to API_KEY env var
+    setSetting('api_key', null);
+    console.log('API key reset to env var');
+    return c.json({ reset: true, source: 'env' });
+});
+
 // ── Buffer Status ─────────────────────────────────────────────────────────────
 
 app.get('/status', (c) => {
@@ -340,14 +346,13 @@ async function start() {
     await initDb();
 
     console.log(`
-┌─────────────────────────────────────────┐
-│   Structured Memory API                 │
-│   http://localhost:${PORT}                 │
-│   MCP: http://localhost:${PORT}/sse            │
-│                                         │
-│   Storage: ${STORAGE_PATH.padEnd(28)}│
-│   Auth: ${currentApiKey() ? 'API key required' : 'disabled (dev mode)'}${''.padEnd(currentApiKey() ? 13 : 4)}│
-└─────────────────────────────────────────┘
+-------------------------------------------------------
+   Structured Memory API                 
+   http://localhost:${PORT}              
+   MCP: http://localhost:${PORT}/sse     
+                                         
+   Storage: ${STORAGE_PATH.padEnd(28)}   
+-------------------------------------------------------
 `);
 
     // Use raw http.createServer to intercept MCP SSE routes.

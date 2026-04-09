@@ -8,7 +8,8 @@
   <a href="#quick-start">Quick Start</a> ·
   <a href="#connect-to-claude--cursor">Connect to Claude</a> ·
   <a href="#mcp-tools">MCP Tools</a> ·
-  <a href="#api-reference">API Reference</a>
+  <a href="#api-reference">API Reference</a> ·
+  <a href="DEPLOY.md">Deploy</a>
 </p>
 
 ---
