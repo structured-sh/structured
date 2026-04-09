@@ -8,3 +8,6 @@ dist
 .env
 .env.*
 *.parquet
+
+# Local dev scripts (not published)
+scripts/

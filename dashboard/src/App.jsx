@@ -54,7 +54,7 @@ function Sidebar({ page, setPage, connected }) {
         { id: 'memories', icon: Brain, label: 'Memories' },
         { id: 'query', icon: Search, label: 'Query Console' },
         { id: 'files', icon: HardDrive, label: 'Files' },
-        { id: 'documents', icon: FileText, label: 'Documents' },
+        { id: 'documents', icon: FileText, label: 'Store' },
     ];
 
     const systemLinks = [
@@ -673,8 +673,8 @@ function DocumentsPage() {
     return (
         <>
             <div className="page-header">
-                <h2>Documents</h2>
-                <p>Unstructured JSON document store — for when you need flexibility</p>
+                <h2>Store</h2>
+                <p>Key-value JSON store — configs, templates, and references. Use Memories for queryable analytics data.</p>
             </div>
             <div className="page-content">
                 <div style={{ display: 'flex', gap: 20 }}>
@@ -694,7 +694,7 @@ function DocumentsPage() {
                             </button>
                         ))}
                         {collections.length === 0 && (
-                            <div style={{ color: 'var(--text-muted)', fontSize: 11, padding: 12 }}>No collections. Store a document via API or MCP.</div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: 11, padding: 12 }}>Empty. Store a config or reference via API or MCP.</div>
                         )}
                     </div>
                     <div style={{ flex: 1 }}>
@@ -715,14 +715,14 @@ function DocumentsPage() {
                         ) : selected ? (
                             <div className="empty-state">
                                 <FileText />
-                                <h3>No documents</h3>
-                                <p>Store documents in "{selected}" via API or MCP.</p>
+                                <h3>No items</h3>
+                                <p>Store configs or references in "{selected}" via API or MCP.</p>
                             </div>
                         ) : (
                             <div className="empty-state">
                                 <FileText />
                                 <h3>Select a collection</h3>
-                                <p>Choose a document collection from the left.</p>
+                                <p>Choose a collection from the left to browse stored items.</p>
                             </div>
                         )}
                     </div>
