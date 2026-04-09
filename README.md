@@ -338,14 +338,20 @@ The old key is invalidated immediately.
 
 ## Stack
 
-| Layer | Tech |
-|-------|------|
-| API | [Hono](https://hono.dev) |
-| Metadata | [sql.js](https://github.com/sql-js/sql.js) (SQLite WASM) |
-| Query | [@duckdb/duckdb-wasm](https://github.com/duckdb/duckdb-wasm) |
-| Storage | [tiny-parquet](https://npmjs.com/package/tiny-parquet) |
-| MCP | [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/sdk) |
-| Dashboard | Vite + React |
+Only 7 npm packages. No native addons — everything runs in WASM or pure JS.
+
+| Package | What it does |
+|---|---|
+| [`hono`](https://hono.dev) + `@hono/node-server` | HTTP router — fast, Web-standard API |
+| [`@duckdb/duckdb-wasm`](https://github.com/duckdb/duckdb-wasm) | SQL query engine, runs fully in WASM |
+| [`sql.js`](https://github.com/sql-js/sql.js) | SQLite in WASM — stores schema metadata |
+| [`tiny-parquet`](https://npmjs.com/package/tiny-parquet) | Pure-JS Parquet writer, zero native deps |
+| [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/sdk) | MCP server/tool registration |
+| [`zod`](https://zod.dev) | Schema validation for API inputs |
+
+**Runtime:** Node.js ≥ 20
+
+Because everything runs in WASM, there are no C++ builds, no `node-gyp`, no platform-specific binaries. The Docker image works on any architecture Docker supports.
 
 ## Development
 

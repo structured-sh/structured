@@ -2,6 +2,8 @@
 
 Self-host on any Linux server. A $6/mo DigitalOcean Droplet or equivalent is plenty.
 
+> **Lightweight by design.** The API has only 7 npm dependencies — DuckDB and SQLite run as WASM, Parquet is pure JS. No native addons, no `node-gyp`, no platform-specific builds. Works on any Docker host.
+
 ---
 
 ## Requirements
