@@ -1,6 +1,7 @@
 # ═══════════════════════════════════════════════════════════════
 # Structured Memory — Docker Compose
 # ═══════════════════════════════════════════════════════════════
+name: structured
 #
 # Usage:
 #   docker compose up        → Start all services
@@ -18,6 +19,7 @@ services:
   # ─── API Server ──────────────────────────────────────────────
   # Core engine: Hono + SQLite + DuckDB + tiny-parquet
   api:
+    container_name: structured-api
     build: ./api
     ports:
       - "3001:3001"
@@ -38,6 +40,7 @@ services:
   # ─── MCP Server ─────────────────────────────────────────────
   # stdio transport — connect via docker exec or MCP client
   mcp:
+    container_name: structured-mcp
     build: ./mcp
     depends_on:
       api:
@@ -47,11 +50,17 @@ services:
       - API_KEY=sk_structured_dev
     stdin_open: true
     tty: true
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://api:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
 
   # ─── Dashboard ──────────────────────────────────────────────
   # Web UI for schema management, data preview, query console
   dashboard:
+    container_name: structured-dashboard
     build: ./dashboard
     ports:
       - "3000:3000"
@@ -61,4 +70,9 @@ services:
     environment:
       - VITE_API_URL=http://localhost:3001
       - VITE_API_KEY=sk_structured_dev
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
