@@ -14,6 +14,7 @@ import { executeQuery, previewMemory, closeDuckDb } from './services/query.js';
 import { LocalStorage } from './storage/local.js';
 import { authMiddleware } from './middleware/auth.js';
 import { getActiveApiKey, rotateApiKey } from './db/settings.js';
+import { login, validateSession, isDashboardAuthEnabled } from './services/auth.js';
 import { handleSSE, handleMessage } from './mcp/handler.js';
 
 const app = new Hono();
@@ -21,6 +22,7 @@ const app = new Hono();
 // Config
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const ENV_API_KEY = process.env.API_KEY || null;
+const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || null;
 const STORAGE_PATH = process.env.STORAGE_PATH || './data/parquet';
 
 // Returns active key (DB overrides env — allows zero-restart rotation)
@@ -35,13 +37,16 @@ const buffer = getIngestBuffer(storage);
 app.use('*', cors({
     origin: '*',
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Session-Token'],
 }));
 
 app.use('*', async (c, next) => {
     if (c.req.method === 'OPTIONS') return next();
     if (c.req.path === '/health') return next();
     if (c.req.path === '/sse' || c.req.path === '/messages') return next();
+
+    // Dashboard auth routes — skip API key check
+    if (c.req.path.startsWith('/auth/')) return next();
 
     const auth = authMiddleware(c.req.raw, currentApiKey());
     if (!auth.ok) return auth.response;
@@ -263,7 +268,36 @@ app.delete('/documents/:collection/:id', (c) => {
     return c.json({ deleted: true });
 });
 
+// ── Dashboard Auth ────────────────────────────────────────────────────────────
+
+app.get('/auth/status', (c) => {
+    return c.json({ auth_enabled: isDashboardAuthEnabled(DASHBOARD_PASSWORD) });
+});
+
+app.post('/auth/login', async (c) => {
+    try {
+        const { password } = await c.req.json();
+        const result = login(password, DASHBOARD_PASSWORD);
+        return c.json(result);
+    } catch (err) {
+        return c.json({ error: err.message }, 401);
+    }
+});
+
+app.get('/auth/me', (c) => {
+    const token = c.req.header('X-Session-Token');
+    const valid = validateSession(token, DASHBOARD_PASSWORD);
+    if (!valid) return c.json({ error: 'Invalid or expired session' }, 401);
+    return c.json({ authenticated: true });
+});
+
+app.post('/auth/logout', (c) => {
+    // Stateless tokens — client just discards; nothing to invalidate server-side
+    return c.json({ logged_out: true });
+});
+
 // ── API Key Management ───────────────────────────────────────────────────────
+
 
 app.get('/settings/api-key', (c) => {
     const key = currentApiKey();

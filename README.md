@@ -61,24 +61,42 @@ Works with Claude Desktop, Cursor, Windsurf, Cline, or any MCP-compatible client
 
 ## Quick Start
 
-### 1. Start the stack
+### 1. Clone and configure
 
 ```bash
-git clone https://github.com/user/structured-opensource.git
-cd structured-opensource
+git clone https://github.com/structured-sh/structured.git
+cd structured
+```
+
+Edit `docker-compose.yml` and set your credentials:
+
+```yaml
+environment:
+  - API_KEY=your-secret-api-key        # Used by MCP clients & scripts
+  - DASHBOARD_PASSWORD=your-password   # Protects the dashboard UI
+```
+
+> **Two separate credentials:**
+> - `API_KEY` — machine auth for MCP clients, scripts, and analytics ingestion
+> - `DASHBOARD_PASSWORD` — human auth for the web dashboard. Leave unset to disable login (local-only use).
+
+### 2. Start the stack
+
+```bash
 docker compose up -d
 ```
 
-| Service     | URL                   |
-|-------------|-----------------------|
+| Service     | URL                    |
+|-------------|------------------------|
 | Dashboard   | http://localhost:3000  |
 | API         | http://localhost:3001  |
-| MCP         | stdio (auto-connected)|
+| MCP         | stdio (auto-connected) |
 
-### 2. Create a memory
+### 3. Create a memory
 
 ```bash
 curl -X POST http://localhost:3001/memories \
+  -H "Authorization: Bearer your-secret-api-key" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "user_preferences",
@@ -91,32 +109,27 @@ curl -X POST http://localhost:3001/memories \
   }'
 ```
 
-### 3. Write data
+### 4. Write data
 
 ```bash
 curl -X POST http://localhost:3001/memories/user_preferences/write \
+  -H "Authorization: Bearer your-secret-api-key" \
   -H "Content-Type: application/json" \
   -d '{
     "data": [
       { "key": "theme", "value": "dark", "priority": 1 },
-      { "key": "language", "value": "en", "priority": 2 },
-      { "key": "timezone", "value": "UTC+2", "priority": 3 }
+      { "key": "language", "value": "en", "priority": 2 }
     ]
   }'
-```
-
-### 4. Flush to Parquet
-
-```bash
-curl -X POST http://localhost:3001/memories/user_preferences/flush
 ```
 
 ### 5. Query with SQL
 
 ```bash
 curl -X POST http://localhost:3001/query \
+  -H "Authorization: Bearer your-secret-api-key" \
   -H "Content-Type: application/json" \
-  -d '{ "sql": "SELECT * FROM user_preferences WHERE priority > 1" }'
+  -d '{ "sql": "SELECT * FROM user_preferences ORDER BY priority" }'
 ```
 
 Memory names work as table names — DuckDB resolves them to Parquet files automatically.
@@ -137,7 +150,7 @@ duckdb.sql("SELECT * FROM './data/parquet/user_preferences/**/*.parquet'").show(
 
 ## Connect to Claude / Cursor
 
-### Local (self-hosted)
+### Local (Docker)
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -145,11 +158,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "structured": {
-      "command": "node",
-      "args": ["/path/to/structured-opensource/mcp/index.js"],
-      "env": {
-        "API_URL": "http://localhost:3001"
-      }
+      "command": "docker",
+      "args": ["exec", "-i", "structured-mcp", "node", "index.js"]
     }
   }
 }
@@ -160,24 +170,8 @@ For **Cursor**, add to Settings → Features → MCP Servers:
 ```json
 {
   "structured": {
-    "command": "node",
-    "args": ["/path/to/structured-opensource/mcp/index.js"],
-    "env": {
-      "API_URL": "http://localhost:3001"
-    }
-  }
-}
-```
-
-For **Docker** (production):
-
-```json
-{
-  "mcpServers": {
-    "structured": {
-      "command": "docker",
-      "args": ["exec", "-i", "structured-opensource-mcp-1", "node", "index.js"]
-    }
+    "command": "docker",
+    "args": ["exec", "-i", "structured-mcp", "node", "index.js"]
   }
 }
 ```
@@ -197,17 +191,6 @@ For **Docker** (production):
 }
 ```
 
-### How to tell local vs cloud apart?
-
-They're the same tool, same 9 commands. The only difference is where data lives:
-
-| | Local | Cloud |
-|---|---|---|
-| **Data** | `./data/` on your machine | Cloudflare R2 |
-| **Config** | `command: "node"` | `command: "npx"` with proxy |
-| **Speed** | Instant (local disk) | Edge-fast (global CDN) |
-| **Cost** | Free | Usage-based |
-
 ## MCP Tools
 
 Once connected, just talk naturally. The AI picks the right tool.
@@ -219,12 +202,69 @@ Once connected, just talk naturally. The AI picks the right tool.
 | `describe_memory` | *"Show me the schema for daily_sales"* |
 | `write_memory` | *"Save today's sales: date=2026-04-09, revenue=1250.50, units=42"* |
 | `query_memory` | *"What's the total revenue this month?"* |
-| `store_document` | *"Remember this meeting note for later"* |
+| `store_document` | *"Remember this config for later"* |
 | `get_document` | *"Get the document abc-123"* |
 | `flush_memory` | *"Flush all pending data to disk"* |
 | `delete_memory` | *"Delete the test_data memory"* |
 
+## Ingesting Data from Your Apps
+
+Use the templates in `templates/` to send events from external systems:
+
+| Template | Use case |
+|----------|----------|
+| `templates/ingest-app-analytics.js` | Mobile/web app events (installs, actions, purchases) |
+| `templates/ingest-webhook.js` | Stripe, GitHub, Shopify webhooks |
+| `templates/query-report.js` | Generate SQL reports → terminal, Markdown, or Slack |
+
+```js
+// Example: track an install from your iOS app
+import { track } from './templates/ingest-app-analytics.js';
+await track('install', 'user_abc', { platform: 'ios', app_version: '1.0.0' });
+```
+
+Then query across all your events:
+
+```sql
+SELECT event, COUNT(*) as n, COUNT(DISTINCT user_id) as users
+FROM app_events
+WHERE timestamp > now() - INTERVAL '30 days'
+GROUP BY event ORDER BY n DESC
+```
+
+## Dead Letter Queue
+
+Records rejected by `strict` or `evolve` schema modes are **not dropped** — they're automatically written to `_dlq_{memory_name}` for inspection:
+
+```sql
+-- See what was rejected and why
+SELECT _reason, _payload, _rejected_at
+FROM _dlq_app_events
+ORDER BY _rejected_at DESC
+LIMIT 20
+```
+
+## API Key Rotation
+
+Rotate your API key at any time from the dashboard **Connect** page without restarting:
+
+1. Go to **Connect** → **API Key** section
+2. Click **Rotate Key**
+3. Copy the new key (shown once)
+4. Update your MCP config and any scripts
+
+The old key is invalidated immediately.
+
 ## API Reference
+
+### Auth (Dashboard)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/auth/status` | Check if dashboard auth is enabled |
+| `POST` | `/auth/login` | Login with `{ password }`, returns session token |
+| `GET` | `/auth/me` | Validate current session (`X-Session-Token` header) |
+| `POST` | `/auth/logout` | Logout (client discards token) |
 
 ### Memories
 
@@ -246,14 +286,21 @@ Once connected, just talk naturally. The AI picks the right tool.
 |--------|------|-------------|
 | `POST` | `/query` | Execute DuckDB SQL |
 
-### Documents
+### Store (Documents)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/documents` | Store a document |
+| `POST` | `/documents` | Store a JSON document |
 | `GET` | `/documents/collections` | List collections |
 | `GET` | `/documents/:collection` | List documents |
 | `DELETE` | `/documents/:collection/:id` | Delete document |
+
+### Settings
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/settings/api-key` | Get masked current API key |
+| `POST` | `/settings/rotate-key` | Generate new API key |
 
 ### Files
 
@@ -274,7 +321,7 @@ Once connected, just talk naturally. The AI picks the right tool.
 |------|----------|
 | `flex` | Accept all fields, no validation (default) |
 | `evolve` | Accept all, detect and log schema drift |
-| `strict` | Reject records with mismatched fields |
+| `strict` | Reject records with mismatched fields → DLQ |
 
 ## Field Types
 

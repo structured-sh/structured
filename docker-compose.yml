@@ -27,7 +27,8 @@ services:
       - ./data:/app/data
     environment:
       - PORT=3001
-      - API_KEY=sk_structured_dev
+      - API_KEY=sk_structured_dev          # Change this — used by MCP clients & scripts
+      - DASHBOARD_PASSWORD=changeme         # Change this — protects the dashboard UI
       - DB_PATH=/app/data/structured.db
       - STORAGE_PATH=/app/data/parquet
     healthcheck:

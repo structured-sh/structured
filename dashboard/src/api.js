@@ -5,6 +5,20 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const API_KEY = import.meta.env.VITE_API_KEY || '';
 
+const SESSION_KEY = 'structured_session';
+
+export function getSession() {
+    return localStorage.getItem(SESSION_KEY);
+}
+
+export function setSession(token) {
+    localStorage.setItem(SESSION_KEY, token);
+}
+
+export function clearSession() {
+    localStorage.removeItem(SESSION_KEY);
+}
+
 async function request(method, path, body = null) {
     const opts = {
         method,
@@ -13,6 +27,11 @@ async function request(method, path, body = null) {
 
     if (API_KEY) {
         opts.headers['Authorization'] = `Bearer ${API_KEY}`;
+    }
+
+    const session = getSession();
+    if (session) {
+        opts.headers['X-Session-Token'] = session;
     }
 
     if (body) {
@@ -32,6 +51,12 @@ async function request(method, path, body = null) {
 export const api = {
     // Health
     health: () => request('GET', '/health'),
+
+    // Auth
+    authStatus: () => request('GET', '/auth/status'),
+    login: (password) => request('POST', '/auth/login', { password }),
+    me: () => request('GET', '/auth/me'),
+    logout: () => request('POST', '/auth/logout'),
 
     // Memories
     listMemories: () => request('GET', '/memories'),

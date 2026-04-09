@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Database, Table, Search, FileText, Settings, Brain, Plus, Play, Trash2, Eye, Download, X, ChevronRight, HardDrive, BarChart3, Layers, Cable, Copy, Check, Terminal, ExternalLink, Zap, RefreshCw } from 'lucide-react';
-import { api } from './api.js';
+import { Database, Table, Search, FileText, Settings, Brain, Plus, Play, Trash2, Eye, Download, X, ChevronRight, HardDrive, BarChart3, Layers, Cable, Copy, Check, Terminal, ExternalLink, Zap, RefreshCw, LogOut, Lock } from 'lucide-react';
+import { api, getSession, setSession, clearSession } from './api.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -24,18 +24,66 @@ function formatNumber(n) {
 export default function App() {
     const [page, setPage] = useState('memories');
     const [connected, setConnected] = useState(false);
+    const [authEnabled, setAuthEnabled] = useState(false);
+    const [authenticated, setAuthenticated] = useState(false);
+    const [authLoading, setAuthLoading] = useState(true);
 
     useEffect(() => {
+        // Check if auth is enabled, then validate existing session
+        api.authStatus()
+            .then(({ auth_enabled }) => {
+                setAuthEnabled(auth_enabled);
+                if (!auth_enabled) {
+                    setAuthenticated(true);
+                    setAuthLoading(false);
+                    return;
+                }
+                const token = getSession();
+                if (!token) { setAuthLoading(false); return; }
+                return api.me()
+                    .then(() => { setAuthenticated(true); setAuthLoading(false); })
+                    .catch(() => { clearSession(); setAuthLoading(false); });
+            })
+            .catch(() => {
+                // If API unreachable, still show app (will show errors inline)
+                setAuthLoading(false);
+            });
+    }, []);
+
+    useEffect(() => {
+        if (!authenticated) return;
         api.health().then(() => setConnected(true)).catch(() => setConnected(false));
         const interval = setInterval(() => {
             api.health().then(() => setConnected(true)).catch(() => setConnected(false));
         }, 15000);
         return () => clearInterval(interval);
-    }, []);
+    }, [authenticated]);
+
+    const handleLogin = (token) => {
+        setSession(token);
+        setAuthenticated(true);
+    };
+
+    const handleLogout = () => {
+        clearSession();
+        setAuthenticated(false);
+    };
+
+    if (authLoading) {
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                Loading...
+            </div>
+        );
+    }
+
+    if (authEnabled && !authenticated) {
+        return <LoginPage onLogin={handleLogin} />;
+    }
 
     return (
         <div className="app-layout">
-            <Sidebar page={page} setPage={setPage} connected={connected} />
+            <Sidebar page={page} setPage={setPage} connected={connected} onLogout={authEnabled ? handleLogout : null} />
             <main className="main-content">
                 {page === 'memories' && <MemoriesPage />}
                 {page === 'query' && <QueryPage />}
@@ -47,9 +95,73 @@ export default function App() {
     );
 }
 
+// ── Login Page ────────────────────────────────────────────────────────────────
+
+function LoginPage({ onLogin }) {
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const submit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+            const { token } = await api.login(password);
+            onLogin(token);
+        } catch (err) {
+            setError(err.message || 'Invalid password');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            height: '100vh', background: 'var(--bg-primary)',
+        }}>
+            <div style={
+                { width: 340, background: 'var(--bg-elevated)', border: '1px solid var(--glass-border)', borderRadius: 8, padding: 32, boxShadow: 'var(--glass-shadow)' }
+            }>
+                <div style={{ marginBottom: 28, textAlign: 'center' }}>
+                    <div style={{ width: 40, height: 40, background: 'var(--accent-dim)', border: '1px solid rgba(42,125,111,0.3)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                        <Lock size={18} style={{ color: 'var(--accent-primary)' }} />
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Structured Memory</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Enter your dashboard password to continue</div>
+                </div>
+
+                <form onSubmit={submit}>
+                    <div className="form-group">
+                        <label className="form-label">Password</label>
+                        <input
+                            id="dashboard-password"
+                            className="form-input"
+                            type="password"
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            placeholder="Dashboard password"
+                            autoFocus
+                        />
+                    </div>
+                    {error && <div style={{ color: 'var(--error)', fontSize: 11, marginBottom: 14 }}>{error}</div>}
+                    <button id="login-submit" className="btn btn-primary" type="submit" disabled={loading} style={{ width: '100%', justifyContent: 'center' }}>
+                        {loading ? 'Signing in...' : 'Sign in'}
+                    </button>
+                </form>
+
+                <div style={{ marginTop: 20, fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.6, textAlign: 'center' }}>
+                    Set <code style={{ background: 'var(--bg-tertiary)', padding: '1px 4px', borderRadius: 3 }}>DASHBOARD_PASSWORD</code> in <code style={{ background: 'var(--bg-tertiary)', padding: '1px 4px', borderRadius: 3 }}>docker-compose.yml</code>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ── Sidebar ──────────────────────────────────────────────────────────────────
 
-function Sidebar({ page, setPage, connected }) {
+function Sidebar({ page, setPage, connected, onLogout }) {
     const dataLinks = [
         { id: 'memories', icon: Brain, label: 'Memories' },
         { id: 'query', icon: Search, label: 'Query Console' },
@@ -89,6 +201,15 @@ function Sidebar({ page, setPage, connected }) {
                     </button>
                 ))}
             </nav>
+            {onLogout && (
+                <button
+                    onClick={onLogout}
+                    className="nav-link"
+                    style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--glass-border)', marginTop: 'auto' }}
+                >
+                    <LogOut size={14} /> Sign out
+                </button>
+            )}
             <div className="connection-status">
                 <div className={`connection-dot ${connected ? '' : 'offline'}`} />
                 {connected ? 'API connected' : 'API offline'}
