@@ -15,7 +15,29 @@ export function Sidebar({ page, setPage, connected, onLogout }) {
     return (
         <aside className="sidebar">
             <div className="sidebar-logo">
-                <h1><span>■</span> structured</h1>
+                <h1>
+                    <span style={{
+                        display: 'inline-grid',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
+                        gridTemplateRows: 'repeat(3, 1fr)',
+                        width: 18,
+                        height: 18,
+                        gap: 1,
+                        background: 'var(--bg-secondary)',
+                        flexShrink: 0,
+                        verticalAlign: 'middle',
+                        marginRight: 6,
+                        marginBottom: 2,
+                    }}>
+                        {[0,1,2,3,4,5,6,7,8].map(i => (
+                            <span key={i} style={{
+                                background: [0,4,8].includes(i) ? '#737373' : 'var(--bg-primary)',
+                                display: 'block',
+                            }} />
+                        ))}
+                    </span>
+                    structured
+                </h1>
                 <p>memory for AI</p>
             </div>
             <nav className="sidebar-nav">
